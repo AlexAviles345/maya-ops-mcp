@@ -1,4 +1,4 @@
-"""Contratos de entrada para las herramientas MCP."""
+"""Contratos de entrada tipados y validados para las herramientas MCP."""
 
 from __future__ import annotations
 
@@ -8,6 +8,36 @@ from typing import Any
 from maya_retopo_mcp.errors import ValidationError
 
 
+def _reject_unexpected_keys(raw: dict[str, Any], allowed: set[str], tool_name: str) -> None:
+    unexpected = sorted(set(raw.keys()) - allowed)
+    if unexpected:
+        raise ValidationError(
+            code="INVALID_ARGUMENTS",
+            message=f"`{tool_name}` recibió parámetros no reconocidos: {', '.join(unexpected)}.",
+            recoverable=True,
+            suggestion=f"Parámetros permitidos para {tool_name}: {', '.join(sorted(allowed)) or 'ninguno'}.",
+        )
+
+
+def _validate_dag_path(raw_dag: Any, tool_name: str) -> str:
+    if not isinstance(raw_dag, str) or not raw_dag.strip():
+        raise ValidationError(
+            code="MISSING_DAG_PATH",
+            message=f"`{tool_name}` requiere un `dag_path` no vacío.",
+            recoverable=True,
+            suggestion="Proporcione el DAG path del nodo o shape (por ejemplo '|retopo_cuerpo').",
+        )
+    dag = raw_dag.strip()
+    if any(ch in dag for ch in (";", "\n", "\r", "`", "$")):
+        raise ValidationError(
+            code="INVALID_DAG_PATH",
+            message=f"El `dag_path` '{dag}' contiene caracteres inválidos.",
+            recoverable=True,
+            suggestion="Use únicamente nombres y rutas DAG válidos de Maya.",
+        )
+    return dag
+
+
 @dataclass(frozen=True)
 class HealthRequest:
     """Entrada para `maya.health` (no admite argumentos desconocidos)."""
@@ -15,13 +45,7 @@ class HealthRequest:
     @classmethod
     def from_dict(cls, raw: dict[str, Any] | None) -> HealthRequest:
         if raw:
-            unexpected = ", ".join(sorted(raw.keys()))
-            raise ValidationError(
-                code="INVALID_ARGUMENTS",
-                message=f"`maya.health` no acepta parámetros. Recibidos: {unexpected}.",
-                recoverable=True,
-                suggestion="Envíe un objeto vacío `{}`.",
-            )
+            _reject_unexpected_keys(raw, set(), "maya.health")
         return cls()
 
 
@@ -36,9 +60,11 @@ class ProjectConfigureRequest:
     backups_dir: str
 
     @classmethod
-    def from_dict(cls, raw: dict[str, Any]) -> ProjectConfigureRequest:
-        required = ("project_root", "original_dir", "output_dir", "reports_dir", "backups_dir")
-        missing = [k for k in required if not isinstance(raw.get(k), str) or not str(raw.get(k)).strip()]
+    def from_dict(cls, raw: dict[str, Any] | None) -> ProjectConfigureRequest:
+        data = raw or {}
+        required = {"project_root", "original_dir", "output_dir", "reports_dir", "backups_dir"}
+        _reject_unexpected_keys(data, required, "project.configure")
+        missing = [k for k in sorted(required) if not isinstance(data.get(k), str) or not str(data.get(k)).strip()]
         if missing:
             raise ValidationError(
                 code="MISSING_REQUIRED_FIELDS",
@@ -47,11 +73,259 @@ class ProjectConfigureRequest:
                 suggestion="Proporcione rutas absolutas válidas para las 5 carpetas del proyecto.",
             )
         return cls(
-            project_root=str(raw["project_root"]).strip(),
-            original_dir=str(raw["original_dir"]).strip(),
-            output_dir=str(raw["output_dir"]).strip(),
-            reports_dir=str(raw["reports_dir"]).strip(),
-            backups_dir=str(raw["backups_dir"]).strip(),
+            project_root=str(data["project_root"]).strip(),
+            original_dir=str(data["original_dir"]).strip(),
+            output_dir=str(data["output_dir"]).strip(),
+            reports_dir=str(data["reports_dir"]).strip(),
+            backups_dir=str(data["backups_dir"]).strip(),
+        )
+
+
+@dataclass(frozen=True)
+class SceneDescribeRequest:
+    """Entrada para `scene.describe`."""
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any] | None) -> SceneDescribeRequest:
+        if raw:
+            _reject_unexpected_keys(raw, set(), "scene.describe")
+        return cls()
+
+
+@dataclass(frozen=True)
+class ListMeshesRequest:
+    """Entrada con soporte de paginación y filtros para `scene.list_meshes`."""
+
+    offset: int = 0
+    limit: int = 50
+    include_hidden: bool = True
+    include_intermediate: bool = False
+    name_contains: str = ""
+    min_faces: int = 0
+    max_faces: int | None = None
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any] | None) -> ListMeshesRequest:
+        data = raw or {}
+        allowed = {
+            "offset",
+            "limit",
+            "include_hidden",
+            "include_intermediate",
+            "name_contains",
+            "min_faces",
+            "max_faces",
+        }
+        _reject_unexpected_keys(data, allowed, "scene.list_meshes")
+
+        offset = int(data.get("offset", 0))
+        limit = int(data.get("limit", 50))
+        if offset < 0:
+            raise ValidationError(
+                code="INVALID_PAGINATION",
+                message="El parámetro `offset` no puede ser negativo.",
+                recoverable=True,
+            )
+        if limit < 1 or limit > 500:
+            raise ValidationError(
+                code="INVALID_PAGINATION",
+                message="El parámetro `limit` debe estar entre 1 y 500.",
+                recoverable=True,
+            )
+        min_faces = int(data.get("min_faces", 0))
+        max_faces_raw = data.get("max_faces")
+        max_faces = int(max_faces_raw) if max_faces_raw is not None else None
+        if min_faces < 0 or (max_faces is not None and max_faces < min_faces):
+            raise ValidationError(
+                code="INVALID_FILTER_RANGE",
+                message="El rango `min_faces`..`max_faces` es inválido.",
+                recoverable=True,
+            )
+
+        return cls(
+            offset=offset,
+            limit=limit,
+            include_hidden=bool(data.get("include_hidden", True)),
+            include_intermediate=bool(data.get("include_intermediate", False)),
+            name_contains=str(data.get("name_contains", "")).strip(),
+            min_faces=min_faces,
+            max_faces=max_faces,
+        )
+
+    def to_bridge_params(self) -> dict[str, Any]:
+        return {
+            "offset": self.offset,
+            "limit": self.limit,
+            "include_hidden": self.include_hidden,
+            "include_intermediate": self.include_intermediate,
+            "name_contains": self.name_contains,
+            "min_faces": self.min_faces,
+            "max_faces": self.max_faces,
+        }
+
+
+@dataclass(frozen=True)
+class SelectionGetRequest:
+    """Entrada para `selection.get`."""
+
+    max_components: int = 500
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any] | None) -> SelectionGetRequest:
+        data = raw or {}
+        _reject_unexpected_keys(data, {"max_components"}, "selection.get")
+        max_comp = int(data.get("max_components", 500))
+        if max_comp < 1 or max_comp > 10_000:
+            raise ValidationError(
+                code="INVALID_MAX_COMPONENTS",
+                message="`max_components` debe estar entre 1 y 10000.",
+                recoverable=True,
+            )
+        return cls(max_components=max_comp)
+
+
+@dataclass(frozen=True)
+class DetectCandidatesRequest:
+    """Entrada para `retopo.detect_candidates`."""
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any] | None) -> DetectCandidatesRequest:
+        if raw:
+            _reject_unexpected_keys(raw, set(), "retopo.detect_candidates")
+        return cls()
+
+
+@dataclass(frozen=True)
+class AnalyzeMeshRequest:
+    """Entrada para `retopo.analyze_mesh`."""
+
+    dag_path: str
+    coincident_tolerance: float = 1e-4
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any] | None) -> AnalyzeMeshRequest:
+        data = raw or {}
+        _reject_unexpected_keys(data, {"dag_path", "coincident_tolerance"}, "retopo.analyze_mesh")
+        dag = _validate_dag_path(data.get("dag_path"), "retopo.analyze_mesh")
+        tol = float(data.get("coincident_tolerance", 1e-4))
+        if tol <= 0 or tol > 10.0:
+            raise ValidationError(
+                code="INVALID_TOLERANCE",
+                message="`coincident_tolerance` debe estar entre 1e-8 y 10.0.",
+                recoverable=True,
+            )
+        return cls(dag_path=dag, coincident_tolerance=tol)
+
+
+@dataclass(frozen=True)
+class AnalyzeSymmetryRequest:
+    """Entrada para `retopo.analyze_symmetry`."""
+
+    dag_path: str
+    tolerance: float = 0.05
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any] | None) -> AnalyzeSymmetryRequest:
+        data = raw or {}
+        _reject_unexpected_keys(data, {"dag_path", "tolerance"}, "retopo.analyze_symmetry")
+        dag = _validate_dag_path(data.get("dag_path"), "retopo.analyze_symmetry")
+        tol = float(data.get("tolerance", 0.05))
+        if tol <= 0 or tol > 100.0:
+            raise ValidationError(
+                code="INVALID_TOLERANCE",
+                message="`tolerance` debe ser mayor que 0 y menor o igual a 100.0.",
+                recoverable=True,
+            )
+        return cls(dag_path=dag, tolerance=tol)
+
+
+@dataclass(frozen=True)
+class BoundaryLoopsRequest:
+    """Entrada para `retopo.boundary_loops`."""
+
+    dag_path: str
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any] | None) -> BoundaryLoopsRequest:
+        data = raw or {}
+        _reject_unexpected_keys(data, {"dag_path"}, "retopo.boundary_loops")
+        dag = _validate_dag_path(data.get("dag_path"), "retopo.boundary_loops")
+        return cls(dag_path=dag)
+
+
+@dataclass(frozen=True)
+class ViewportCaptureRequest:
+    """Entrada tipada para `viewport.capture` (Sección 6)."""
+
+    camera: str = "persp"
+    width: int = 1024
+    height: int = 1024
+    wireframe_on_shaded: bool = True
+    isolate: list[str] = field(default_factory=list)
+    frame_selected: bool = True
+    file_name: str | None = None
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any] | None) -> ViewportCaptureRequest:
+        data = raw or {}
+        allowed = {
+            "camera",
+            "width",
+            "height",
+            "wireframe_on_shaded",
+            "isolate",
+            "frame_selected",
+            "file_name",
+        }
+        _reject_unexpected_keys(data, allowed, "viewport.capture")
+
+        camera = str(data.get("camera", "persp")).strip()
+        if not camera or any(ch in camera for ch in (";", "\n", "\r", "`", "$")):
+            raise ValidationError(
+                code="INVALID_CAMERA_NAME",
+                message=f"Nombre de cámara inválido: '{camera}'.",
+                recoverable=True,
+                suggestion="Use una cámara válida como 'persp', 'front', 'side' o 'top'.",
+            )
+
+        width = int(data.get("width", 1024))
+        height = int(data.get("height", 1024))
+        if not (64 <= width <= 4096) or not (64 <= height <= 4096):
+            raise ValidationError(
+                code="INVALID_DIMENSIONS",
+                message=f"Las dimensiones ({width}x{height}) deben estar entre 64x64 y 4096x4096.",
+                recoverable=True,
+            )
+
+        raw_isolate = data.get("isolate") or []
+        if not isinstance(raw_isolate, list):
+            raise ValidationError(
+                code="INVALID_ISOLATE_LIST",
+                message="El parámetro `isolate` debe ser una lista de DAG paths.",
+                recoverable=True,
+            )
+        isolate = [_validate_dag_path(item, "viewport.capture") for item in raw_isolate]
+
+        file_name_raw = data.get("file_name")
+        file_name: str | None = None
+        if file_name_raw is not None:
+            file_name = str(file_name_raw).strip()
+            if "/" in file_name or "\\" in file_name or ".." in file_name:
+                raise ValidationError(
+                    code="INVALID_CAPTURE_FILENAME",
+                    message="`file_name` debe ser un nombre de archivo simple sin separadores de directorio.",
+                    recoverable=True,
+                    suggestion="Use un nombre como 'vista_frontal.png'.",
+                )
+
+        return cls(
+            camera=camera,
+            width=width,
+            height=height,
+            wireframe_on_shaded=bool(data.get("wireframe_on_shaded", True)),
+            isolate=isolate,
+            frame_selected=bool(data.get("frame_selected", True)),
+            file_name=file_name,
         )
 
 
@@ -62,4 +336,3 @@ class PreviewRegionRequest:
     operation_id: str
     parameters: dict[str, Any] = field(default_factory=dict)
     views: list[str] = field(default_factory=lambda: ["front", "side", "top"])
-

@@ -66,7 +66,7 @@ Todas las herramientas publicadas por `maya-retopo-mcp` siguen el formato `names
 
 ---
 
-### Fase 1: Solo Lectura (Planificadas)
+### Fase 1: Solo Lectura (Implementadas)
 
 | Herramienta | Modo Mínimo | Lectura | Idempotente | Destructiva | Descripción |
 | :--- | :--- | :---: | :---: | :---: | :--- |

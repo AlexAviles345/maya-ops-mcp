@@ -15,3 +15,4 @@ Esta lista debe ejecutarse siempre sobre **copias desechables** de escenas antes
 - [ ] Undo automático después de fallo provocado en un handler regional.
 - [ ] Guardado versionado (`scene.save_version`) en `output/` y reapertura con validación.
 - [ ] Comprobación con escena con cambios sin guardar (`modified: true`).
+
