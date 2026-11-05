@@ -129,7 +129,7 @@ py -m unittest discover -s tests -p "test_*.py" -v
 - [x] **Fase 2: Selección y roles** — `selection.set`, `retopo.confirm_roles`, huella y protección de malla high-poly.
 - [x] **Fase 3: Preview seguro** — Operaciones registradas, undo chunks, `safety.checkpoint`, `retopo.preview_region`.
 - [x] **Fase 4: Aplicación** — `retopo.apply_region`, `retopo.validate`, `scene.save_version`.
-- [ ] **Fase 5: Endurecimiento** — Límites estrictos, paginación avanzada, auditoría de escenas corruptas y guía de recuperación.
+- [x] **Fase 5: Endurecimiento** — Límites estrictos, paginación avanzada, auditoría de escenas corruptas y guía de recuperación.
 
 ---
 
@@ -143,4 +143,5 @@ Para detalles arquitectónicos, modelo de amenazas y referencia de herramientas,
 - [`docs/tool_reference.md`](docs/tool_reference.md) — Referencia detallada de herramientas MCP, contratos de entrada/salida y códigos de error.
 - [`docs/maya_setup.md`](docs/maya_setup.md) — Configuración paso a paso de Autodesk Maya 2027, puertos loopback y resolución de problemas.
 - [`docs/development.md`](docs/development.md) — Guía de desarrollo, convenciones de código, pruebas con Maya simulado y procedimiento de rollback.
+- [`docs/recovery.md`](docs/recovery.md) — Guía de recuperación ante incidentes, checkpoints, versiones `.rejected` y restauración de estado.
 

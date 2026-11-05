@@ -393,7 +393,8 @@ def analyze_mesh_topology(
 
     for f_idx, face in enumerate(snapshot.faces):
         deg = len(face)
-        if deg < 3 or len(set(face)) < 3:
+        valid_indices = all(0 <= v < v_count for v in face)
+        if deg < 3 or len(set(face)) < 3 or not valid_indices:
             invalid_faces.append(f_idx)
         elif deg == 3:
             triangles.append(f_idx)
@@ -402,7 +403,7 @@ def analyze_mesh_topology(
         else:
             ngons.append(f_idx)
 
-        if deg >= 3 and all(0 <= v < v_count for v in face):
+        if deg >= 3 and valid_indices:
             area = _polygon_area(snapshot.vertices, face)
             if area <= zero_area_tolerance:
                 zero_area_faces.append(f_idx)
