@@ -400,9 +400,69 @@ class ViewportCaptureRequest:
 
 
 @dataclass(frozen=True)
+class SafetyCheckpointRequest:
+    """Entrada tipada para `safety.checkpoint` (Fase 3)."""
+
+    reason: str = "pre_operation_checkpoint"
+    base_name: str = "checkpoint.mb"
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any] | None) -> SafetyCheckpointRequest:
+        data = raw or {}
+        _reject_unexpected_keys(data, {"reason", "base_name"}, "safety.checkpoint")
+        reason = str(data.get("reason", "pre_operation_checkpoint")).strip()
+        if not reason:
+            raise ValidationError(
+                code="EMPTY_CHECKPOINT_REASON",
+                message="El parámetro `reason` no puede estar vacío.",
+                recoverable=True,
+            )
+        base_name = str(data.get("base_name", "checkpoint.mb")).strip()
+        if "/" in base_name or "\\" in base_name or ".." in base_name:
+            raise ValidationError(
+                code="INVALID_CHECKPOINT_NAME",
+                message="`base_name` debe ser un nombre de archivo simple sin rutas.",
+                recoverable=True,
+            )
+        return cls(reason=reason, base_name=base_name)
+
+
+@dataclass(frozen=True)
 class PreviewRegionRequest:
-    """Entrada tipada para `retopo.preview_region`."""
+    """Entrada tipada para `retopo.preview_region` (Fase 3)."""
 
     operation_id: str
     parameters: dict[str, Any] = field(default_factory=dict)
     views: list[str] = field(default_factory=lambda: ["front", "side", "top"])
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any] | None) -> PreviewRegionRequest:
+        data = raw or {}
+        _reject_unexpected_keys(data, {"operation_id", "parameters", "views"}, "retopo.preview_region")
+        op_id = str(data.get("operation_id") or "").strip()
+        if not op_id:
+            raise ValidationError(
+                code="MISSING_OPERATION_ID",
+                message="`retopo.preview_region` requiere `operation_id` (ej. 'hands_v1').",
+                recoverable=True,
+                suggestion="Use uno de los operation_id registrados: feet_v1, hands_v1, head_face_v1.",
+            )
+        params = data.get("parameters") or {}
+        if not isinstance(params, dict):
+            raise ValidationError(
+                code="INVALID_OPERATION_PARAMETERS",
+                message="El campo `parameters` debe ser un objeto JSON (dict).",
+                recoverable=True,
+            )
+        raw_views = data.get("views")
+        if raw_views is None:
+            views = ["front", "side", "top"]
+        else:
+            if not isinstance(raw_views, list) or not raw_views:
+                raise ValidationError(
+                    code="INVALID_VIEWS_LIST",
+                    message="`views` debe ser una lista no vacía de nombres de cámara.",
+                    recoverable=True,
+                )
+            views = [str(v).strip() for v in raw_views if str(v).strip()]
+        return cls(operation_id=op_id, parameters=dict(params), views=views)

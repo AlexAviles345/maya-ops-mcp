@@ -14,7 +14,10 @@ from maya_retopo_mcp.logging_config import configure_logging
 from maya_retopo_mcp.models.responses import ToolResponseEnvelope
 from maya_retopo_mcp.policies.paths import ProjectPathsPolicy
 from maya_retopo_mcp.policies.permissions import TOOL_SECURITY_REGISTRY
-from maya_retopo_mcp.policies.protected_mesh import ConfirmedRolesState
+from maya_retopo_mcp.policies.protected_mesh import (
+    ConfirmedRolesState,
+    VerifiedPreviewRecord,
+)
 from maya_retopo_mcp.tools.maya_tools import execute_maya_health
 from maya_retopo_mcp.tools.project_tools import execute_project_configure
 from maya_retopo_mcp.tools.retopo_tools import (
@@ -23,7 +26,9 @@ from maya_retopo_mcp.tools.retopo_tools import (
     execute_retopo_boundary_loops,
     execute_retopo_confirm_roles,
     execute_retopo_detect_candidates,
+    execute_retopo_preview_region,
 )
+from maya_retopo_mcp.tools.safety_tools import execute_safety_checkpoint
 from maya_retopo_mcp.tools.scene_tools import (
     execute_scene_describe,
     execute_scene_list_meshes,
@@ -141,6 +146,24 @@ TOOL_INPUT_SCHEMAS: dict[str, dict[str, Any]] = {
         },
         "additionalProperties": False,
     },
+    "safety.checkpoint": {
+        "type": "object",
+        "properties": {
+            "reason": {"type": "string", "default": "pre_operation_checkpoint"},
+            "base_name": {"type": "string", "default": "checkpoint.mb"},
+        },
+        "additionalProperties": False,
+    },
+    "retopo.preview_region": {
+        "type": "object",
+        "properties": {
+            "operation_id": {"type": "string"},
+            "parameters": {"type": "object", "default": {}},
+            "views": {"type": "array", "items": {"type": "string"}, "default": ["front", "side", "top"]},
+        },
+        "required": ["operation_id"],
+        "additionalProperties": False,
+    },
 }
 
 
@@ -157,14 +180,18 @@ class MayaRetopoMcpServer:
         self.client = client or MayaLoopbackClient(self.config)
         self.project_policy: ProjectPathsPolicy | None = None
         self.confirmed_roles: ConfirmedRolesState | None = None
+        self.last_verified_preview: VerifiedPreviewRecord | None = None
         self._tools: dict[str, tuple[dict[str, Any], ToolHandler]] = {}
-        self._register_phase0_to_phase2_tools()
+        self._register_phase0_to_phase3_tools()
 
     def _set_project_policy(self, policy: ProjectPathsPolicy) -> None:
         self.project_policy = policy
 
     def _set_confirmed_roles(self, roles: ConfirmedRolesState) -> None:
         self.confirmed_roles = roles
+
+    def _set_verified_preview(self, record: VerifiedPreviewRecord) -> None:
+        self.last_verified_preview = record
 
     def _register_tool(self, tool_name: str, handler: ToolHandler) -> None:
         meta = TOOL_SECURITY_REGISTRY[tool_name]
@@ -176,7 +203,7 @@ class MayaRetopoMcpServer:
         }
         self._tools[tool_name] = (schema, handler)
 
-    def _register_phase0_to_phase2_tools(self) -> None:
+    def _register_phase0_to_phase3_tools(self) -> None:
         self._register_tool(
             "maya.health",
             lambda args: execute_maya_health(
@@ -274,6 +301,27 @@ class MayaRetopoMcpServer:
                 client=self.client,
                 arguments=args,
                 project_policy=self.project_policy,
+            ),
+        )
+        self._register_tool(
+            "safety.checkpoint",
+            lambda args: execute_safety_checkpoint(
+                config=self.config,
+                client=self.client,
+                arguments=args,
+                project_policy=self.project_policy,
+                confirmed_roles=self.confirmed_roles,
+            ),
+        )
+        self._register_tool(
+            "retopo.preview_region",
+            lambda args: execute_retopo_preview_region(
+                config=self.config,
+                client=self.client,
+                arguments=args,
+                project_policy=self.project_policy,
+                confirmed_roles=self.confirmed_roles,
+                on_preview_verified=self._set_verified_preview,
             ),
         )
 

@@ -14,11 +14,19 @@ from maya_retopo_mcp.models.requests import (
     BoundaryLoopsRequest,
     ConfirmRolesRequest,
     DetectCandidatesRequest,
+    PreviewRegionRequest,
 )
 from maya_retopo_mcp.models.responses import ToolResponseEnvelope, current_iso_timestamp
 from maya_retopo_mcp.policies.paths import ProjectPathsPolicy
-from maya_retopo_mcp.policies.permissions import check_tool_permission
-from maya_retopo_mcp.policies.protected_mesh import ConfirmedRolesState, MeshFingerprint
+from maya_retopo_mcp.policies.permissions import (
+    check_tool_permission,
+    validate_operation_id,
+)
+from maya_retopo_mcp.policies.protected_mesh import (
+    ConfirmedRolesState,
+    MeshFingerprint,
+    VerifiedPreviewRecord,
+)
 from maya_retopo_mcp.tools import execute_bridge_backed_tool, logger
 from maya_retopo_mcp.transport.command_port import MayaLoopbackClient
 
@@ -219,3 +227,137 @@ def execute_retopo_boundary_loops(
         arguments=arguments,
         build_bridge_params=_build,
     )
+
+
+def execute_retopo_preview_region(
+    *,
+    config: ServerConfig,
+    client: MayaLoopbackClient,
+    arguments: dict[str, Any] | None = None,
+    project_policy: ProjectPathsPolicy | None = None,
+    confirmed_roles: ConfirmedRolesState | None = None,
+    on_preview_verified: Callable[[VerifiedPreviewRecord], None] | None = None,
+) -> ToolResponseEnvelope:
+    """
+    Ejecuta una operación regional registrada dentro de un undo chunk, valida topología,
+    captura vistas de comprobación y deshace dejando `scene_restored: true` (Sección 6).
+    """
+    start_ns = time.perf_counter_ns()
+    tool_name = "retopo.preview_region"
+
+    try:
+        check_tool_permission(tool_name, config.mode)
+        req = PreviewRegionRequest.from_dict(arguments)
+        validate_operation_id(req.operation_id)
+
+        if project_policy is None:
+            raise SecurityPolicyError(
+                code="PROJECT_NOT_CONFIGURED",
+                message="Debe configurar el proyecto (`project.configure`) antes de ejecutar un preview.",
+                recoverable=True,
+                suggestion="Ejecute `project.configure` primero.",
+            )
+
+        if confirmed_roles is None:
+            raise SecurityPolicyError(
+                code="ROLES_NOT_CONFIRMED",
+                message="Debe confirmar los roles (`retopo.confirm_roles`) antes de ejecutar un preview.",
+                recoverable=True,
+                suggestion="Ejecute `retopo.confirm_roles` primero.",
+            )
+
+        report_file = project_policy.next_version_path(
+            f"preview_{req.operation_id}.json",
+            directory_category="reports",
+        )
+        view_output_paths: dict[str, str] = {}
+        for view in req.views:
+            img_path = project_policy.reports_dir / f"{report_file.stem}_{view}.png"
+            validated_img = project_policy.validate_write_target(
+                str(img_path),
+                category="reports",
+                allow_overwrite=False,
+            )
+            view_output_paths[view] = validated_img.as_posix()
+
+        bridge_resp = client.send_action(
+            tool_name,
+            {
+                "operation_id": req.operation_id,
+                "parameters": req.parameters,
+                "views": req.views,
+                "view_output_paths": view_output_paths,
+                "high_poly_dag": confirmed_roles.high_poly.dag_path,
+                "retopology_dag": confirmed_roles.retopology.dag_path,
+                "expected_high_poly_hash": confirmed_roles.high_poly.structural_hash,
+            },
+        )
+        duration_ms = max(0, (time.perf_counter_ns() - start_ns) // 1_000_000)
+
+        if not bridge_resp.ok:
+            err = bridge_resp.error or ErrorDetail(
+                code="PREVIEW_REGION_FAILED",
+                message=f"Fallo durante el preview de '{req.operation_id}'.",
+                recoverable=True,
+            )
+            return ToolResponseEnvelope.failure(
+                tool=tool_name,
+                error=err,
+                scene=bridge_resp.scene,
+                scene_modified=bridge_resp.scene_modified,
+                warnings=bridge_resp.warnings,
+                duration_ms=duration_ms,
+            )
+
+        result_data = dict(bridge_resp.data)
+        result_data["report_path"] = report_file.as_posix()
+        report_file.parent.mkdir(parents=True, exist_ok=True)
+        report_file.write_text(
+            json.dumps(result_data, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+
+        if on_preview_verified is not None and result_data.get("scene_restored") is True:
+            record = VerifiedPreviewRecord(
+                scene=bridge_resp.scene,
+                operation_id=req.operation_id,
+                parameters=dict(req.parameters),
+                high_poly_hash=str(result_data.get("high_poly_hash", confirmed_roles.high_poly.structural_hash)),
+                retopology_initial_hash=str(result_data.get("retopology_initial_hash", "")),
+                timestamp=current_iso_timestamp(),
+            )
+            on_preview_verified(record)
+
+        return ToolResponseEnvelope.success(
+            tool=tool_name,
+            data=result_data,
+            scene=bridge_resp.scene,
+            scene_modified=bridge_resp.scene_modified,
+            warnings=bridge_resp.warnings,
+            duration_ms=duration_ms,
+        )
+    except MayaRetopoMcpError as exc:
+        duration_ms = max(0, (time.perf_counter_ns() - start_ns) // 1_000_000)
+        logger.warning(
+            "Error controlado en %s: %s",
+            tool_name,
+            exc.detail.message,
+            extra={"tool": tool_name, "error_code": exc.detail.code},
+        )
+        return ToolResponseEnvelope.failure(
+            tool=tool_name,
+            error=exc.detail,
+            duration_ms=duration_ms,
+        )
+    except Exception:
+        duration_ms = max(0, (time.perf_counter_ns() - start_ns) // 1_000_000)
+        logger.exception("Excepción inesperada en %s", tool_name, extra={"tool": tool_name})
+        return ToolResponseEnvelope.failure(
+            tool=tool_name,
+            error=ErrorDetail(
+                code="INTERNAL_SERVER_ERROR",
+                message="Error interno inesperado en retopo.preview_region.",
+                recoverable=True,
+            ),
+            duration_ms=duration_ms,
+        )

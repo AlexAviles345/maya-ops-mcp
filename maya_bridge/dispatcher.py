@@ -8,6 +8,8 @@ from typing import Any, Callable
 
 from maya_bridge.handlers_preview import (
     handle_retopo_confirm_roles,
+    handle_retopo_preview_region,
+    handle_safety_checkpoint,
     handle_selection_set,
 )
 from maya_bridge.handlers_read import (
@@ -37,6 +39,8 @@ ALLOWED_HANDLERS: dict[str, HandlerFunc] = {
     "retopo.analyze_symmetry": handle_retopo_analyze_symmetry,
     "retopo.boundary_loops": handle_retopo_boundary_loops,
     "viewport.capture": handle_viewport_capture,
+    "safety.checkpoint": handle_safety_checkpoint,
+    "retopo.preview_region": handle_retopo_preview_region,
 }
 
 
