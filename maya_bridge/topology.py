@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 from collections import deque
 from dataclasses import dataclass, field
@@ -746,4 +748,41 @@ def detect_retopo_candidates(snapshots: list[MeshGeometrySnapshot]) -> dict[str,
             "shells, fronteras abiertas y superposición espacial de bounding boxes. "
             "El artista debe confirmar explícitamente los roles con retopo.confirm_roles."
         ),
+    }
+
+
+def compute_snapshot_fingerprint(snapshot: MeshGeometrySnapshot) -> dict[str, Any]:
+    """
+    Calcula la huella estructural de una malla (`dag_path`, `uuid`, conteos V/E/F,
+    `bounding_box` y `structural_hash` SHA-256 sobre topología y posiciones) compatible con
+    `MeshFingerprint` de `src/maya_retopo_mcp/policies/protected_mesh.py`.
+    """
+    edges, _, _ = _build_edge_Structures(snapshot.faces)
+    v_count = len(snapshot.vertices)
+    e_count = len(edges)
+    f_count = len(snapshot.faces)
+    bbox = snapshot.bounding_box
+    sampled_points = snapshot.vertices[:2048]
+
+    payload = {
+        "dag_path": snapshot.transform_dag_path,
+        "uuid": snapshot.uuid,
+        "v": v_count,
+        "e": e_count,
+        "f": f_count,
+        "bbox": [round(val, 5) for val in bbox],
+        "points": [[round(c, 5) for c in pt] for pt in sampled_points],
+    }
+    serialized = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    structural_hash = hashlib.sha256(serialized).hexdigest()
+
+    return {
+        "dag_path": snapshot.transform_dag_path,
+        "shape_dag_path": snapshot.shape_dag_path,
+        "uuid": snapshot.uuid,
+        "vertex_count": v_count,
+        "edge_count": e_count,
+        "face_count": f_count,
+        "bounding_box": [round(val, 5) for val in bbox],
+        "structural_hash": structural_hash,
     }

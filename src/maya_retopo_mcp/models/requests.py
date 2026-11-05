@@ -185,6 +185,76 @@ class SelectionGetRequest:
 
 
 @dataclass(frozen=True)
+class SelectionSetRequest:
+    """Entrada para `selection.set` (Fase 2)."""
+
+    items: list[str] = field(default_factory=list)
+    clear: bool = False
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any] | None) -> SelectionSetRequest:
+        data = raw or {}
+        _reject_unexpected_keys(data, {"items", "clear"}, "selection.set")
+        raw_items = data.get("items") or []
+        if not isinstance(raw_items, list):
+            raise ValidationError(
+                code="INVALID_SELECTION_ITEMS",
+                message="El parámetro `items` debe ser una lista de DAG paths o componentes.",
+                recoverable=True,
+            )
+        items = [_validate_dag_path(item, "selection.set") for item in raw_items]
+        clear = bool(data.get("clear", False))
+        if not clear and not items:
+            raise ValidationError(
+                code="EMPTY_SELECTION_REQUEST",
+                message="Proporcione al menos un elemento en `items` o `clear=true`.",
+                recoverable=True,
+            )
+        return cls(items=items, clear=clear)
+
+
+@dataclass(frozen=True)
+class ConfirmRolesRequest:
+    """Entrada para `retopo.confirm_roles` (Fase 2)."""
+
+    high_poly: str | None = None
+    retopology: str | None = None
+    use_current_selection: bool = False
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any] | None) -> ConfirmRolesRequest:
+        data = raw or {}
+        allowed = {"high_poly", "retopology", "use_current_selection"}
+        _reject_unexpected_keys(data, allowed, "retopo.confirm_roles")
+
+        use_sel = bool(data.get("use_current_selection", False))
+        hp_raw = data.get("high_poly")
+        rt_raw = data.get("retopology")
+
+        hp = _validate_dag_path(hp_raw, "retopo.confirm_roles") if hp_raw else None
+        rt = _validate_dag_path(rt_raw, "retopo.confirm_roles") if rt_raw else None
+
+        if not use_sel and (not hp or not rt):
+            raise ValidationError(
+                code="MISSING_ROLE_DAG_PATHS",
+                message=(
+                    "`retopo.confirm_roles` requiere los DAG paths explícitos `high_poly` y `retopology`, "
+                    "o bien `use_current_selection=true`."
+                ),
+                recoverable=True,
+                suggestion="Especifique `high_poly` y `retopology` o seleccione ambas mallas en Maya y pase `use_current_selection=true`.",
+            )
+        if hp and rt and hp == rt:
+            raise ValidationError(
+                code="DUPLICATE_ROLE_MESH",
+                message="`high_poly` y `retopology` deben ser mallas distintas.",
+                recoverable=True,
+            )
+
+        return cls(high_poly=hp, retopology=rt, use_current_selection=use_sel)
+
+
+@dataclass(frozen=True)
 class DetectCandidatesRequest:
     """Entrada para `retopo.detect_candidates`."""
 

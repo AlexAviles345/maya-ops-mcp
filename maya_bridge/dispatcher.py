@@ -6,6 +6,10 @@ import json
 import threading
 from typing import Any, Callable
 
+from maya_bridge.handlers_preview import (
+    handle_retopo_confirm_roles,
+    handle_selection_set,
+)
 from maya_bridge.handlers_read import (
     get_current_scene_state,
     handle_maya_health,
@@ -26,7 +30,9 @@ ALLOWED_HANDLERS: dict[str, HandlerFunc] = {
     "scene.describe": handle_scene_describe,
     "scene.list_meshes": handle_scene_list_meshes,
     "selection.get": handle_selection_get,
+    "selection.set": handle_selection_set,
     "retopo.detect_candidates": handle_retopo_detect_candidates,
+    "retopo.confirm_roles": handle_retopo_confirm_roles,
     "retopo.analyze_mesh": handle_retopo_analyze_mesh,
     "retopo.analyze_symmetry": handle_retopo_analyze_symmetry,
     "retopo.boundary_loops": handle_retopo_boundary_loops,
