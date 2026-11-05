@@ -122,3 +122,30 @@ class ConfirmedRolesState:
             "retopology": self.retopology.to_dict(),
         }
 
+
+@dataclass(frozen=True)
+class VerifiedPreviewRecord:
+    """Registro verificable de un `retopo.preview_region` exitoso (exigido antes de `apply_region`)."""
+
+    scene: str | None
+    operation_id: str
+    parameters: dict[str, Any]
+    high_poly_hash: str
+    retopology_initial_hash: str
+    timestamp: str
+
+    def matches_apply_request(
+        self,
+        *,
+        scene: str | None,
+        operation_id: str,
+        parameters: dict[str, Any],
+        high_poly_hash: str,
+    ) -> bool:
+        return (
+            self.scene == scene
+            and self.operation_id == operation_id
+            and self.parameters == parameters
+            and self.high_poly_hash == high_poly_hash
+        )
+

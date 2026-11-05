@@ -91,7 +91,7 @@ Todas las herramientas publicadas por `maya-retopo-mcp` siguen el formato `names
 
 ---
 
-### Fase 3: Preview Seguro (Planificadas)
+### Fase 3: Preview Seguro (Implementadas)
 
 | Herramienta | Modo Mínimo | Lectura | Idempotente | Destructiva | Descripción |
 | :--- | :--- | :---: | :---: | :---: | :--- |

@@ -127,7 +127,7 @@ py -m unittest discover -s tests -p "test_*.py" -v
 - [x] **Fase 0: Base segura** — Estructura del repositorio, configuración, logging sanitizado, políticas de seguridad base, transporte TCP loopback hacia Maya, puente `maya_bridge`, herramienta `maya.health` y pruebas unitarias + Maya simulado.
 - [x] **Fase 1: Solo lectura** — `project.configure`, `scene.describe`, `scene.list_meshes`, `selection.get`, `retopo.detect_candidates`, `retopo.analyze_mesh`, `retopo.analyze_symmetry`, `retopo.boundary_loops`, `viewport.capture`.
 - [x] **Fase 2: Selección y roles** — `selection.set`, `retopo.confirm_roles`, huella y protección de malla high-poly.
-- [ ] **Fase 3: Preview seguro** — Operaciones registradas, undo chunks, `safety.checkpoint`, `retopo.preview_region`.
+- [x] **Fase 3: Preview seguro** — Operaciones registradas, undo chunks, `safety.checkpoint`, `retopo.preview_region`.
 - [ ] **Fase 4: Aplicación** — `retopo.apply_region`, `retopo.validate`, `scene.save_version`.
 - [ ] **Fase 5: Endurecimiento** — Límites estrictos, paginación avanzada, auditoría de escenas corruptas y guía de recuperación.
 
