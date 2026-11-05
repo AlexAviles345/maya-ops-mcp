@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.0.0",
+  "operations": {
+    "feet_v1": {
+      "operation_id": "feet_v1",
+      "module": "operations.feet_v1",
+      "handler": "execute_feet_v1",
+      "enabled": true,
+      "description": "Operación regional registrada de retopología para pies (quads puros)."
+    },
+    "hands_v1": {
+      "operation_id": "hands_v1",
+      "module": "operations.hands_v1",
+      "handler": "execute_hands_v1",
+      "enabled": true,
+      "description": "Operación regional registrada de retopología para manos (quads puros)."
+    },
+    "head_face_v1": {
+      "operation_id": "head_face_v1",
+      "module": "operations.head_face_v1",
+      "handler": "execute_head_face_v1",
+      "enabled": true,
+      "description": "Operación regional registrada de retopología para cabeza y rostro (quads puros)."
+    }
+  }
+}
+

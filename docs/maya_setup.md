@@ -55,3 +55,4 @@ El proceso externo (`maya_retopo_mcp.server`) acepta las siguientes variables de
 | `MAYA_MCP_MAX_PAYLOAD_BYTES` | `1048576` | Tamaño máximo de respuesta JSON permitido (1 MiB por defecto). |
 | `MAYA_MCP_MODE` | `READ_ONLY` | Modo operativo inicial (`READ_ONLY`, `PREVIEW`, `APPLY`). |
 | `MAYA_MCP_LOG_FILE` | *(opcional)* | Ruta local para almacenar logs JSON estructurados. |
+

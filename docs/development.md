@@ -59,3 +59,4 @@ py -m maya_retopo_mcp.server --self-check
 3. **En Escenas de Proyecto:**
    - La carpeta `original/` nunca es tocada por el servidor.
    - Si cualquier versión en `output/` es rechazada, restaurar el último archivo en `backups/` correspondiente al timestamp registrado en el reporte de `reports/`.
+

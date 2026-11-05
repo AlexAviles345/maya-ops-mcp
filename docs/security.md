@@ -40,3 +40,4 @@ Cada proyecto conectado define 5 directorios canónicos dentro de `project_root`
 - `output_dir`: Destino único para escenas versionadas (`*_v001.mb`, `*_v002.mb`). Prohibido sobrescribir.
 - `reports_dir`: Destino único para reportes JSON de diagnóstico, confirmación de roles y validación.
 - `backups_dir`: Destino único para checkpoints previos a mutaciones. Prohibido sobrescribir.
+

@@ -107,3 +107,4 @@ Todas las herramientas publicadas por `maya-retopo-mcp` siguen el formato `names
 | `retopo.apply_region` | `APPLY` | No | No | Sí (Controlada) | Exige preview previo exitoso, crea checkpoint, aplica operación, valida, guarda nueva versión y revalida al reabrir. |
 | `retopo.validate` | `READ_ONLY` | Sí | Sí | No | Ejecuta auditoría final sin modificar la escena y devuelve `passed` junto con cada comprobación individual. |
 | `scene.save_version` | `APPLY` | No | No | No | Guarda copia con incremento de versión en `output_dir`, rechazando `original_dir` o sobrescrituras. |
+
