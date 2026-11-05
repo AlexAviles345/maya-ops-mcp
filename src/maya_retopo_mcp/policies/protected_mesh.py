@@ -98,3 +98,27 @@ class MeshFingerprint:
             if abs(expected_val - actual_val) > bbox_tolerance:
                 raise HighPolyChangedError()
 
+
+@dataclass(frozen=True)
+class ConfirmedRolesState:
+    """Estado de roles confirmados por el artista (`high_poly` protegida y `retopology` activa)."""
+
+    high_poly: MeshFingerprint
+    retopology: MeshFingerprint
+    confirmed_via: str
+    confirmed_at: str
+    report_path: str
+    scene: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "roles_confirmed": True,
+            "confirmed_via": self.confirmed_via,
+            "confirmed_at": self.confirmed_at,
+            "scene": self.scene,
+            "report_path": self.report_path,
+            "high_poly_protected": True,
+            "high_poly": self.high_poly.to_dict(),
+            "retopology": self.retopology.to_dict(),
+        }
+

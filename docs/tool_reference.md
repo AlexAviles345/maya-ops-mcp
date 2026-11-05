@@ -82,7 +82,7 @@ Todas las herramientas publicadas por `maya-retopo-mcp` siguen el formato `names
 
 ---
 
-### Fase 2: Selección y Roles (Planificadas)
+### Fase 2: Selección y Roles (Implementadas)
 
 | Herramienta | Modo Mínimo | Lectura | Idempotente | Destructiva | Descripción |
 | :--- | :--- | :---: | :---: | :---: | :--- |
