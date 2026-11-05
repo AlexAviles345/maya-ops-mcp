@@ -42,7 +42,7 @@ class TestFakeMayaTransportAndHealth(unittest.TestCase):
             list_resp = mcp.handle_jsonrpc_message({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
             assert list_resp is not None
             tools = list_resp["result"]["tools"]
-            self.assertEqual(len(tools), 1)
+            self.assertGreaterEqual(len(tools), 10)
             self.assertEqual(tools[0]["name"], "maya.health")
             self.assertTrue(tools[0]["annotations"]["readOnlyHint"])
 

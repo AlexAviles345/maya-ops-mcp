@@ -6,12 +6,31 @@ import json
 import threading
 from typing import Any, Callable
 
-from maya_bridge.handlers_read import get_current_scene_state, handle_maya_health
+from maya_bridge.handlers_read import (
+    get_current_scene_state,
+    handle_maya_health,
+    handle_retopo_analyze_mesh,
+    handle_retopo_analyze_symmetry,
+    handle_retopo_boundary_loops,
+    handle_retopo_detect_candidates,
+    handle_scene_describe,
+    handle_scene_list_meshes,
+    handle_selection_get,
+    handle_viewport_capture,
+)
 
 HandlerFunc = Callable[[dict[str, Any]], dict[str, Any]]
 
 ALLOWED_HANDLERS: dict[str, HandlerFunc] = {
     "maya.health": handle_maya_health,
+    "scene.describe": handle_scene_describe,
+    "scene.list_meshes": handle_scene_list_meshes,
+    "selection.get": handle_selection_get,
+    "retopo.detect_candidates": handle_retopo_detect_candidates,
+    "retopo.analyze_mesh": handle_retopo_analyze_mesh,
+    "retopo.analyze_symmetry": handle_retopo_analyze_symmetry,
+    "retopo.boundary_loops": handle_retopo_boundary_loops,
+    "viewport.capture": handle_viewport_capture,
 }
 
 
