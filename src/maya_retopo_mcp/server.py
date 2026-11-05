@@ -23,15 +23,18 @@ from maya_retopo_mcp.tools.project_tools import execute_project_configure
 from maya_retopo_mcp.tools.retopo_tools import (
     execute_retopo_analyze_mesh,
     execute_retopo_analyze_symmetry,
+    execute_retopo_apply_region,
     execute_retopo_boundary_loops,
     execute_retopo_confirm_roles,
     execute_retopo_detect_candidates,
     execute_retopo_preview_region,
+    execute_retopo_validate,
 )
 from maya_retopo_mcp.tools.safety_tools import execute_safety_checkpoint
 from maya_retopo_mcp.tools.scene_tools import (
     execute_scene_describe,
     execute_scene_list_meshes,
+    execute_scene_save_version,
 )
 from maya_retopo_mcp.tools.selection_tools import (
     execute_selection_get,
@@ -164,6 +167,30 @@ TOOL_INPUT_SCHEMAS: dict[str, dict[str, Any]] = {
         "required": ["operation_id"],
         "additionalProperties": False,
     },
+    "retopo.apply_region": {
+        "type": "object",
+        "properties": {
+            "operation_id": {"type": "string"},
+            "parameters": {"type": "object", "default": {}},
+            "approved": {"type": "boolean"},
+            "base_name": {"type": ["string", "null"], "default": None},
+        },
+        "required": ["operation_id", "approved"],
+        "additionalProperties": False,
+    },
+    "retopo.validate": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": False,
+    },
+    "scene.save_version": {
+        "type": "object",
+        "properties": {
+            "base_name": {"type": ["string", "null"], "default": None},
+            "target_path": {"type": ["string", "null"], "default": None},
+        },
+        "additionalProperties": False,
+    },
 }
 
 
@@ -192,6 +219,9 @@ class MayaRetopoMcpServer:
 
     def _set_verified_preview(self, record: VerifiedPreviewRecord) -> None:
         self.last_verified_preview = record
+
+    def _clear_verified_preview(self) -> None:
+        self.last_verified_preview = None
 
     def _register_tool(self, tool_name: str, handler: ToolHandler) -> None:
         meta = TOOL_SECURITY_REGISTRY[tool_name]
@@ -322,6 +352,38 @@ class MayaRetopoMcpServer:
                 project_policy=self.project_policy,
                 confirmed_roles=self.confirmed_roles,
                 on_preview_verified=self._set_verified_preview,
+            ),
+        )
+        self._register_tool(
+            "retopo.apply_region",
+            lambda args: execute_retopo_apply_region(
+                config=self.config,
+                client=self.client,
+                arguments=args,
+                project_policy=self.project_policy,
+                confirmed_roles=self.confirmed_roles,
+                last_verified_preview=self.last_verified_preview,
+                on_preview_consumed=self._clear_verified_preview,
+            ),
+        )
+        self._register_tool(
+            "retopo.validate",
+            lambda args: execute_retopo_validate(
+                config=self.config,
+                client=self.client,
+                arguments=args,
+                project_policy=self.project_policy,
+                confirmed_roles=self.confirmed_roles,
+            ),
+        )
+        self._register_tool(
+            "scene.save_version",
+            lambda args: execute_scene_save_version(
+                config=self.config,
+                client=self.client,
+                arguments=args,
+                project_policy=self.project_policy,
+                confirmed_roles=self.confirmed_roles,
             ),
         )
 

@@ -466,3 +466,79 @@ class PreviewRegionRequest:
                 )
             views = [str(v).strip() for v in raw_views if str(v).strip()]
         return cls(operation_id=op_id, parameters=dict(params), views=views)
+
+
+@dataclass(frozen=True)
+class RetopoValidateRequest:
+    """Entrada tipada para `retopo.validate` (Fase 4)."""
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any] | None) -> RetopoValidateRequest:
+        if raw:
+            _reject_unexpected_keys(raw, set(), "retopo.validate")
+        return cls()
+
+
+@dataclass(frozen=True)
+class SceneSaveVersionRequest:
+    """Entrada tipada para `scene.save_version` (Fase 4)."""
+
+    base_name: str | None = None
+    target_path: str | None = None
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any] | None) -> SceneSaveVersionRequest:
+        data = raw or {}
+        _reject_unexpected_keys(data, {"base_name", "target_path"}, "scene.save_version")
+        base_name = str(data["base_name"]).strip() if data.get("base_name") else None
+        target_path = str(data["target_path"]).strip() if data.get("target_path") else None
+        return cls(base_name=base_name, target_path=target_path)
+
+
+@dataclass(frozen=True)
+class ApplyRegionRequest:
+    """Entrada tipada para `retopo.apply_region` (Fase 4)."""
+
+    operation_id: str
+    parameters: dict[str, Any] = field(default_factory=dict)
+    approved: bool = False
+    base_name: str | None = None
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any] | None) -> ApplyRegionRequest:
+        data = raw or {}
+        allowed = {"operation_id", "parameters", "approved", "base_name"}
+        _reject_unexpected_keys(data, allowed, "retopo.apply_region")
+
+        op_id = str(data.get("operation_id") or "").strip()
+        if not op_id:
+            raise ValidationError(
+                code="MISSING_OPERATION_ID",
+                message="`retopo.apply_region` requiere `operation_id`.",
+                recoverable=True,
+            )
+
+        params = data.get("parameters") or {}
+        if not isinstance(params, dict):
+            raise ValidationError(
+                code="INVALID_OPERATION_PARAMETERS",
+                message="El campo `parameters` debe ser un objeto JSON.",
+                recoverable=True,
+            )
+
+        approved = bool(data.get("approved", False))
+        if not approved:
+            raise ValidationError(
+                code="EXPLICIT_APPROVAL_REQUIRED",
+                message="`retopo.apply_region` requiere aprobación explícita (`approved: true`).",
+                recoverable=True,
+                suggestion="Ejecute primero `retopo.preview_region` y confirme con `approved: true`.",
+            )
+
+        base_name = str(data["base_name"]).strip() if data.get("base_name") else None
+        return cls(
+            operation_id=op_id,
+            parameters=dict(params),
+            approved=approved,
+            base_name=base_name,
+        )

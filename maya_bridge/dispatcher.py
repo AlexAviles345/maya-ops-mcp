@@ -6,6 +6,11 @@ import json
 import threading
 from typing import Any, Callable
 
+from maya_bridge.handlers_apply import (
+    handle_retopo_apply_region,
+    handle_retopo_validate,
+    handle_scene_save_version,
+)
 from maya_bridge.handlers_preview import (
     handle_retopo_confirm_roles,
     handle_retopo_preview_region,
@@ -41,6 +46,9 @@ ALLOWED_HANDLERS: dict[str, HandlerFunc] = {
     "viewport.capture": handle_viewport_capture,
     "safety.checkpoint": handle_safety_checkpoint,
     "retopo.preview_region": handle_retopo_preview_region,
+    "retopo.apply_region": handle_retopo_apply_region,
+    "retopo.validate": handle_retopo_validate,
+    "scene.save_version": handle_scene_save_version,
 }
 
 

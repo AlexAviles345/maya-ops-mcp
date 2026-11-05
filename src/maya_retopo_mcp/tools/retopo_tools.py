@@ -11,10 +11,12 @@ from maya_retopo_mcp.errors import ErrorDetail, MayaRetopoMcpError, SecurityPoli
 from maya_retopo_mcp.models.requests import (
     AnalyzeMeshRequest,
     AnalyzeSymmetryRequest,
+    ApplyRegionRequest,
     BoundaryLoopsRequest,
     ConfirmRolesRequest,
     DetectCandidatesRequest,
     PreviewRegionRequest,
+    RetopoValidateRequest,
 )
 from maya_retopo_mcp.models.responses import ToolResponseEnvelope, current_iso_timestamp
 from maya_retopo_mcp.policies.paths import ProjectPathsPolicy
@@ -357,6 +359,252 @@ def execute_retopo_preview_region(
             error=ErrorDetail(
                 code="INTERNAL_SERVER_ERROR",
                 message="Error interno inesperado en retopo.preview_region.",
+                recoverable=True,
+            ),
+            duration_ms=duration_ms,
+        )
+
+
+def execute_retopo_validate(
+    *,
+    config: ServerConfig,
+    client: MayaLoopbackClient,
+    arguments: dict[str, Any] | None = None,
+    project_policy: ProjectPathsPolicy | None = None,
+    confirmed_roles: ConfirmedRolesState | None = None,
+) -> ToolResponseEnvelope:
+    """
+    Ejecuta la auditoría final de retopología sin modificar la escena y devuelve `passed`
+    junto a cada comprobación individual sin ocultar errores parciales (Sección 6: `retopo.validate`).
+    """
+    start_ns = time.perf_counter_ns()
+    tool_name = "retopo.validate"
+
+    try:
+        check_tool_permission(tool_name, config.mode)
+        RetopoValidateRequest.from_dict(arguments)
+
+        if confirmed_roles is None:
+            raise SecurityPolicyError(
+                code="ROLES_NOT_CONFIRMED",
+                message="Debe confirmar los roles (`retopo.confirm_roles`) antes de ejecutar `retopo.validate`.",
+                recoverable=True,
+                suggestion="Ejecute `retopo.confirm_roles` primero.",
+            )
+
+        bridge_resp = client.send_action(
+            tool_name,
+            {
+                "high_poly_dag": confirmed_roles.high_poly.dag_path,
+                "retopology_dag": confirmed_roles.retopology.dag_path,
+                "expected_high_poly_hash": confirmed_roles.high_poly.structural_hash,
+            },
+        )
+        duration_ms = max(0, (time.perf_counter_ns() - start_ns) // 1_000_000)
+
+        if not bridge_resp.ok:
+            err = bridge_resp.error or ErrorDetail(
+                code="VALIDATE_FAILED",
+                message="Fallo al ejecutar la auditoría en el puente de Maya.",
+                recoverable=True,
+            )
+            return ToolResponseEnvelope.failure(
+                tool=tool_name,
+                error=err,
+                scene=bridge_resp.scene,
+                scene_modified=bridge_resp.scene_modified,
+                warnings=bridge_resp.warnings,
+                duration_ms=duration_ms,
+            )
+
+        result_data = dict(bridge_resp.data)
+        if project_policy is not None:
+            report_file = project_policy.next_version_path(
+                "validation_audit.json",
+                directory_category="reports",
+            )
+            result_data["report_path"] = report_file.as_posix()
+            report_file.parent.mkdir(parents=True, exist_ok=True)
+            report_file.write_text(
+                json.dumps(result_data, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+        return ToolResponseEnvelope.success(
+            tool=tool_name,
+            data=result_data,
+            scene=bridge_resp.scene,
+            scene_modified=bridge_resp.scene_modified,
+            warnings=bridge_resp.warnings,
+            duration_ms=duration_ms,
+        )
+    except MayaRetopoMcpError as exc:
+        duration_ms = max(0, (time.perf_counter_ns() - start_ns) // 1_000_000)
+        logger.warning(
+            "Error controlado en %s: %s",
+            tool_name,
+            exc.detail.message,
+            extra={"tool": tool_name, "error_code": exc.detail.code},
+        )
+        return ToolResponseEnvelope.failure(
+            tool=tool_name,
+            error=exc.detail,
+            duration_ms=duration_ms,
+        )
+    except Exception:
+        duration_ms = max(0, (time.perf_counter_ns() - start_ns) // 1_000_000)
+        logger.exception("Excepción inesperada en %s", tool_name, extra={"tool": tool_name})
+        return ToolResponseEnvelope.failure(
+            tool=tool_name,
+            error=ErrorDetail(
+                code="INTERNAL_SERVER_ERROR",
+                message="Error interno inesperado en retopo.validate.",
+                recoverable=True,
+            ),
+            duration_ms=duration_ms,
+        )
+
+
+def execute_retopo_apply_region(
+    *,
+    config: ServerConfig,
+    client: MayaLoopbackClient,
+    arguments: dict[str, Any] | None = None,
+    project_policy: ProjectPathsPolicy | None = None,
+    confirmed_roles: ConfirmedRolesState | None = None,
+    last_verified_preview: VerifiedPreviewRecord | None = None,
+    on_preview_consumed: Callable[[], None] | None = None,
+) -> ToolResponseEnvelope:
+    """
+    Aplica una operación regional solo en modo `APPLY`, con aprobación explícita (`approved: true`)
+    y tras verificar un `retopo.preview_region` previo exitoso para la misma escena, operación y parámetros (Sección 6).
+    """
+    start_ns = time.perf_counter_ns()
+    tool_name = "retopo.apply_region"
+
+    try:
+        check_tool_permission(tool_name, config.mode)
+        req = ApplyRegionRequest.from_dict(arguments)
+        validate_operation_id(req.operation_id)
+
+        if project_policy is None:
+            raise SecurityPolicyError(
+                code="PROJECT_NOT_CONFIGURED",
+                message="Debe ejecutar `project.configure` antes de aplicar operaciones.",
+                recoverable=True,
+                suggestion="Ejecute `project.configure` primero.",
+            )
+
+        if confirmed_roles is None:
+            raise SecurityPolicyError(
+                code="ROLES_NOT_CONFIRMED",
+                message="Debe confirmar los roles (`retopo.confirm_roles`) antes de aplicar operaciones.",
+                recoverable=True,
+                suggestion="Ejecute `retopo.confirm_roles` primero.",
+            )
+
+        health_resp = client.send_action("maya.health", {})
+        current_scene = health_resp.scene
+
+        if last_verified_preview is None or not last_verified_preview.matches_apply_request(
+            scene=current_scene,
+            operation_id=req.operation_id,
+            parameters=req.parameters,
+            high_poly_hash=confirmed_roles.high_poly.structural_hash,
+        ):
+            raise SecurityPolicyError(
+                code="PREVIEW_REQUIRED_BEFORE_APPLY",
+                message=(
+                    "No existe un preview exitoso previo para la misma escena, operación y parámetros. "
+                    "Es obligatorio ejecutar `retopo.preview_region` antes de `retopo.apply_region`."
+                ),
+                recoverable=True,
+                suggestion="Ejecute `retopo.preview_region` con exactamente el mismo `operation_id` y `parameters`.",
+            )
+
+        ckpt_file = project_policy.next_version_path(
+            f"pre_apply_{req.operation_id}.mb",
+            directory_category="backups",
+        )
+        base_scene_name = req.base_name or current_scene or "scene.mb"
+        out_file = project_policy.next_version_path(
+            base_scene_name,
+            directory_category="output",
+        )
+
+        bridge_resp = client.send_action(
+            tool_name,
+            {
+                "operation_id": req.operation_id,
+                "parameters": req.parameters,
+                "checkpoint_path": ckpt_file.as_posix(),
+                "output_path": out_file.as_posix(),
+                "high_poly_dag": confirmed_roles.high_poly.dag_path,
+                "retopology_dag": confirmed_roles.retopology.dag_path,
+                "expected_high_poly_hash": confirmed_roles.high_poly.structural_hash,
+            },
+        )
+        duration_ms = max(0, (time.perf_counter_ns() - start_ns) // 1_000_000)
+
+        if not bridge_resp.ok:
+            err = bridge_resp.error or ErrorDetail(
+                code="APPLY_REGION_FAILED",
+                message=f"Fallo al aplicar la operación regional '{req.operation_id}'.",
+                recoverable=True,
+            )
+            return ToolResponseEnvelope.failure(
+                tool=tool_name,
+                error=err,
+                scene=bridge_resp.scene,
+                scene_modified=bridge_resp.scene_modified,
+                warnings=bridge_resp.warnings,
+                duration_ms=duration_ms,
+            )
+
+        result_data = dict(bridge_resp.data)
+        report_file = project_policy.next_version_path(
+            f"apply_{req.operation_id}.json",
+            directory_category="reports",
+        )
+        result_data["report_path"] = report_file.as_posix()
+        report_file.parent.mkdir(parents=True, exist_ok=True)
+        report_file.write_text(
+            json.dumps(result_data, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+
+        if on_preview_consumed is not None:
+            on_preview_consumed()
+
+        return ToolResponseEnvelope.success(
+            tool=tool_name,
+            data=result_data,
+            scene=bridge_resp.scene,
+            scene_modified=bridge_resp.scene_modified,
+            warnings=bridge_resp.warnings,
+            duration_ms=duration_ms,
+        )
+    except MayaRetopoMcpError as exc:
+        duration_ms = max(0, (time.perf_counter_ns() - start_ns) // 1_000_000)
+        logger.warning(
+            "Error controlado en %s: %s",
+            tool_name,
+            exc.detail.message,
+            extra={"tool": tool_name, "error_code": exc.detail.code},
+        )
+        return ToolResponseEnvelope.failure(
+            tool=tool_name,
+            error=exc.detail,
+            duration_ms=duration_ms,
+        )
+    except Exception:
+        duration_ms = max(0, (time.perf_counter_ns() - start_ns) // 1_000_000)
+        logger.exception("Excepción inesperada en %s", tool_name, extra={"tool": tool_name})
+        return ToolResponseEnvelope.failure(
+            tool=tool_name,
+            error=ErrorDetail(
+                code="INTERNAL_SERVER_ERROR",
+                message="Error interno inesperado en retopo.apply_region.",
                 recoverable=True,
             ),
             duration_ms=duration_ms,

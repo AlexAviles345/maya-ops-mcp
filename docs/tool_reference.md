@@ -100,7 +100,7 @@ Todas las herramientas publicadas por `maya-retopo-mcp` siguen el formato `names
 
 ---
 
-### Fase 4: Aplicación y Guardado (Planificadas)
+### Fase 4: Aplicación y Guardado (Implementadas)
 
 | Herramienta | Modo Mínimo | Lectura | Idempotente | Destructiva | Descripción |
 | :--- | :--- | :---: | :---: | :---: | :--- |
