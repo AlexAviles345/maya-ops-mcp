@@ -1,0 +1,5 @@
+[mcp_servers.maya_retopo]
+command = "py"
+args = ["-m", "maya_retopo_mcp.server"]
+env = { PYTHONPATH = "src;.", MAYA_MCP_HOST = "127.0.0.1", MAYA_MCP_PORT = "7001", MAYA_MCP_MODE = "READ_ONLY" }
+tool_timeout_sec = 120
