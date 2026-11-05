@@ -119,3 +119,4 @@ def get_server_status() -> dict[str, Any]:
     if _GLOBAL_SERVER is None:
         return {"running": False, "host": "127.0.0.1", "port": None}
     return _GLOBAL_SERVER.status()
+

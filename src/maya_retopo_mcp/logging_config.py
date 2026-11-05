@@ -55,3 +55,4 @@ def configure_logging(log_file: str | None = None, level: int = logging.INFO) ->
         logger.addHandler(file_handler)
 
     return logger
+

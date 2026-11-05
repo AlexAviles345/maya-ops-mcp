@@ -143,3 +143,4 @@ Para detalles arquitectónicos, modelo de amenazas y referencia de herramientas,
 - [`docs/tool_reference.md`](docs/tool_reference.md) — Referencia detallada de herramientas MCP, contratos de entrada/salida y códigos de error.
 - [`docs/maya_setup.md`](docs/maya_setup.md) — Configuración paso a paso de Autodesk Maya 2027, puertos loopback y resolución de problemas.
 - [`docs/development.md`](docs/development.md) — Guía de desarrollo, convenciones de código, pruebas con Maya simulado y procedimiento de rollback.
+

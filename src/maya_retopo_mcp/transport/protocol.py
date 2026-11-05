@@ -191,3 +191,4 @@ def decode_bridge_response(
         warnings=warnings,
         error=None,
     )
+

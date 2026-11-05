@@ -56,3 +56,4 @@ El sistema está dividido estrictamente en **dos procesos aislados** que se comu
 3. **Módulos de Dominio:**
    - `handlers_read.py`, `handlers_preview.py`, `handlers_apply.py`
    - `topology.py`, `symmetry.py`, `viewport.py`, `checkpoint.py`
+

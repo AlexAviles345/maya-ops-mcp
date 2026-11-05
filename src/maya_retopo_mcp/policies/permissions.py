@@ -245,3 +245,4 @@ def validate_operation_id(
             suggestion=f"Use uno de los identificadores registrados: {allowed_list}.",
         )
     return dict(op_entry)
+

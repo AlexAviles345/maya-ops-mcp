@@ -53,3 +53,4 @@ def handle_maya_health(params: dict[str, Any]) -> dict[str, Any]:
         "scene": scene_name,
         "modified": modified,
     }
+

@@ -85,7 +85,19 @@ class MayaLoopbackClient:
         max_bytes = self._config.max_payload_bytes
 
         try:
-            with socket.create_connection((self._host, self._port), timeout=timeout_sec) as sock:
+            sock = socket.create_connection((self._host, self._port), timeout=timeout_sec)
+        except OSError as exc:
+            raise TransportError(
+                code="MAYA_CONNECTION_ERROR",
+                message=(
+                    f"No fue posible comunicarse con el puente de Maya en {self._host}:{self._port}."
+                ),
+                recoverable=True,
+                suggestion="Asegúrese de que Maya 2027 esté abierto y que `maya_bridge.bootstrap.start_server()` esté activo.",
+            ) from exc
+
+        try:
+            with sock:
                 sock.settimeout(timeout_sec)
                 sock.sendall(payload_bytes)
                 try:
@@ -123,10 +135,10 @@ class MayaLoopbackClient:
             raise TransportError(
                 code="MAYA_CONNECTION_ERROR",
                 message=(
-                    f"No fue posible comunicarse con el puente de Maya en {self._host}:{self._port}."
+                    f"La conexión con el puente de Maya en {self._host}:{self._port} se interrumpió."
                 ),
                 recoverable=True,
-                suggestion="Asegúrese de que Maya 2027 esté abierto y que `maya_bridge.bootstrap.start_server()` esté activo.",
+                suggestion="Asegúrese de que Maya 2027 siga abierto y reintente.",
             ) from exc
 
         raw_response = b"".join(chunks)
@@ -135,3 +147,4 @@ class MayaLoopbackClient:
             expected_request_id=request.request_id,
             max_payload_bytes=max_bytes,
         )
+

@@ -97,3 +97,4 @@ class MeshFingerprint:
         for expected_val, actual_val in zip(self.bounding_box, current.bounding_box, strict=True):
             if abs(expected_val - actual_val) > bbox_tolerance:
                 raise HighPolyChangedError()
+

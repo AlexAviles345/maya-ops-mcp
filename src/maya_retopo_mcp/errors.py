@@ -70,3 +70,4 @@ class HighPolyChangedError(SecurityPolicyError):
             recoverable=True,
             suggestion=suggestion,
         )
+

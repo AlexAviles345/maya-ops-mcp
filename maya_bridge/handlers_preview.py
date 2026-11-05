@@ -37,3 +37,4 @@ def execute_with_rollback_on_error(fn: Any, *args: Any, **kwargs: Any) -> Any:
     """Ejecuta `fn` dentro de un undo chunk que hace undo automático si ocurre un error."""
     with maya_undo_chunk("maya_retopo_mcp_op", always_undo=False):
         return fn(*args, **kwargs)
+

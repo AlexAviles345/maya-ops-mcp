@@ -239,3 +239,4 @@ class ProjectPathsPolicy:
                     allow_overwrite=False,
                 )
             version_num += 1
+
